@@ -10,7 +10,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {channel: stable, cache: true}
       - run: flutter create --org com.peperey --project-name bitchord --platforms android .
-      - run: flutter pub add just_audio:^0.9.40 file_picker:^8.3.7 just_audio_background permission_handler
+      - run: flutter pub add just_audio:^0.9.40 file_picker:^8.3.7 just_audio_background permission_handler youtube_explode_dart
       - name: compileSdk 37
         run: |
           f=$(ls android/app/build.gradle*)

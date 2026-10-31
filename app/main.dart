@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart' as yt;
 import 'package:just_audio_background/just_audio_background.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -19,6 +20,28 @@ String fmt(num s) {
 
 class P extends ChangeNotifier {
   final player = AudioPlayer();
+  final yte = yt.YoutubeExplode();
+
+  Future<List<Song>> ytSearch(String q) async {
+    final r = await yte.search.search(q);
+    return [
+      for (final v in r.take(15))
+        Song(
+            v.title,
+            v.author,
+            'yt:${v.id.value}',
+            HSVColor.fromAHSV(
+                    1, (v.title.hashCode.abs() % 360).toDouble(), .6, .85)
+                .toColor(),
+            v.duration?.inSeconds ?? 0)
+    ];
+  }
+
+  Future<void> addPlay(Song s) async {
+    songs.add(s);
+    notifyListeners();
+    await play(songs.length - 1);
+  }
   final songs = <Song>[];
   final pos = ValueNotifier<Duration>(Duration.zero);
   int i = -1;
@@ -73,8 +96,16 @@ class P extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      Uri uri;
+      if (songs[n].path.startsWith('yt:')) {
+        final m = await yte.videos.streamsClient
+            .getManifest(songs[n].path.substring(3));
+        uri = m.audioOnly.withHighestBitrate().url;
+      } else {
+        uri = Uri.file(songs[n].path);
+      }
       await player.setAudioSource(AudioSource.uri(
-        Uri.file(songs[n].path),
+        uri,
         tag: MediaItem(
             id: songs[n].path,
             title: songs[n].title,
@@ -477,6 +508,24 @@ class Search extends StatefulWidget {
 
 class _SearchState extends State<Search> {
   String q = '';
+  List<Song> yres = [];
+  bool loading = false;
+  String? err;
+
+  Future<void> go() async {
+    if (q.trim().isEmpty) return;
+    setState(() {
+      loading = true;
+      err = null;
+    });
+    try {
+      yres = await p.ytSearch(q);
+    } catch (e) {
+      err = 'YouTube: $e';
+    }
+    if (mounted) setState(() => loading = false);
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: p,
@@ -493,6 +542,7 @@ class _SearchState extends State<Search> {
             children: [
               TextField(
                 onChanged: (v) => setState(() => q = v),
+                onSubmitted: (_) => go(),
                 decoration: InputDecoration(
                   hintText: 'Canciones o artistas',
                   prefixIcon: const Icon(Icons.search_rounded),
@@ -504,6 +554,41 @@ class _SearchState extends State<Search> {
               ),
               const SizedBox(height: 12),
               for (final i in ids) Tile(i),
+              if (q.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: FilledButton.tonalIcon(
+                    onPressed: go,
+                    icon: const Icon(Icons.travel_explore_rounded),
+                    label: Text('Buscar "$q" en YouTube'),
+                  ),
+                ),
+              if (loading)
+                const Center(
+                    child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator())),
+              if (err != null)
+                Text(err!,
+                    maxLines: 3,
+                    style: const TextStyle(color: Colors.redAccent)),
+              for (final s in yres)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Art(s.color, 50, 10),
+                  title: Text(s.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(s.artist,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white54)),
+                  trailing: s.secs > 0
+                      ? Text(fmt(s.secs),
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 12))
+                      : null,
+                  onTap: () => p.addPlay(s),
+                ),
             ],
           );
         },
