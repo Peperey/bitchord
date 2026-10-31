@@ -156,8 +156,12 @@ class _ShellState extends State<Shell> {
               borderRadius: BorderRadius.circular(28),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: NavigationBar(
+                child: MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(padding: EdgeInsets.zero),
+                  child: NavigationBar(
                   height: 64,
+                  surfaceTintColor: Colors.transparent,
                   backgroundColor: Colors.white10,
                   selectedIndex: tab,
                   onDestinationSelected: (v) => setState(() => tab = v),
@@ -170,6 +174,7 @@ class _ShellState extends State<Shell> {
                         icon: Icon(Icons.library_music_rounded),
                         label: 'Biblioteca'),
                   ],
+                ),
                 ),
               ),
             ),
