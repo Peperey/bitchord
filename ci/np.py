@@ -18,7 +18,15 @@ open(f, 'w').write(s)
 
 d = os.path.expanduser('~/.gradle/init.d')
 os.makedirs(d, exist_ok=True)
-open(d + '/repos.gradle', 'w').write("allprojects {\n    repositories {\n        maven { url 'https://jitpack.io' }\n    }\n}\n")
+INIT = r'''gradle.settingsEvaluated { settings ->
+    def drm = settings.dependencyResolutionManagement
+    drm.repositories.maven { url 'https://jitpack.io' }
+    if (drm.repositoriesMode.get().toString() == 'PREFER_PROJECT') {
+        gradle.allprojects { repositories { maven { url 'https://jitpack.io' } } }
+    }
+}
+'''
+open(d + '/repos.gradle', 'w').write(INIT)
 
 k = glob.glob('android/app/src/main/kotlin/**/MainActivity.kt', recursive=True)
 assert k, 'no MainActivity.kt'
