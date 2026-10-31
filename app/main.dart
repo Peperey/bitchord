@@ -96,21 +96,17 @@ class P extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      Uri uri;
+      final tag = MediaItem(
+          id: songs[n].path, title: songs[n].title, artist: songs[n].artist);
       if (songs[n].path.startsWith('yt:')) {
         final m = await yte.videos.streamsClient
             .getManifest(songs[n].path.substring(3));
-        uri = m.audioOnly.withHighestBitrate().url;
+        final info = m.audioOnly.withHighestBitrate();
+        await player.setAudioSource(YtSource(yte, info, tag));
       } else {
-        uri = Uri.file(songs[n].path);
+        await player.setAudioSource(
+            AudioSource.uri(Uri.file(songs[n].path), tag: tag));
       }
-      await player.setAudioSource(AudioSource.uri(
-        uri,
-        tag: MediaItem(
-            id: songs[n].path,
-            title: songs[n].title,
-            artist: songs[n].artist),
-      ));
       player.play();
     } catch (e) {
       error = '$e';
@@ -137,6 +133,47 @@ class P extends ChangeNotifier {
   }
 
   void seek(double v) => player.seek(Duration(seconds: v.toInt()));
+}
+
+class YtSource extends StreamAudioSource {
+  final yt.YoutubeExplode y;
+  final yt.AudioStreamInfo info;
+  YtSource(this.y, this.info, Object tag) : super(tag: tag);
+
+  @override
+  Future<StreamAudioResponse> request([int? start, int? end]) async {
+    final total = info.size.totalBytes;
+    final st = start ?? 0;
+    final en = end ?? total;
+    final src = y.videos.streamsClient.get(info);
+    Stream<List<int>> body() async* {
+      var skip = st;
+      var left = en - st;
+      await for (final c in src) {
+        if (left <= 0) break;
+        var b = c;
+        if (skip > 0) {
+          if (skip >= b.length) {
+            skip -= b.length;
+            continue;
+          }
+          b = b.sublist(skip);
+          skip = 0;
+        }
+        if (b.length > left) b = b.sublist(0, left);
+        left -= b.length;
+        yield b;
+      }
+    }
+
+    return StreamAudioResponse(
+      sourceLength: total,
+      contentLength: en - st,
+      offset: st,
+      stream: body(),
+      contentType: info.codec.mimeType,
+    );
+  }
 }
 
 final p = P();
