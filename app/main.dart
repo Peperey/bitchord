@@ -1,22 +1,14 @@
-import 'dart:async';
 import 'dart:ui';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:just_audio/just_audio.dart';
 
 class Song {
-  final String title, artist, album;
-  final int secs;
+  final String title, artist, path;
   final Color color;
-  const Song(this.title, this.artist, this.album, this.secs, this.color);
+  int secs;
+  Song(this.title, this.artist, this.path, this.color, [this.secs = 0]);
 }
-
-const songs = [
-  Song('Neon Rain', 'Luna Vega', 'Midnight City', 212, Color(0xFF7C4DFF)),
-  Song('Cassette Heart', 'The Fades', 'Analog', 187, Color(0xFFFF6E40)),
-  Song('Golden Hour', 'Mara Sol', 'Atardecer', 241, Color(0xFFFFB300)),
-  Song('Ocean Drive', 'Kilo & Mar', 'Costa', 198, Color(0xFF00B8D4)),
-  Song('Polvo de Estrellas', 'Nadir', 'Cosmos', 265, Color(0xFFE040FB)),
-  Song('Bosque', 'Verde Azul', 'Raíces', 174, Color(0xFF43A047)),
-];
 
 String fmt(num s) {
   final t = s.toInt();
@@ -24,53 +16,88 @@ String fmt(num s) {
 }
 
 class P extends ChangeNotifier {
-  int i = 0;
+  final player = AudioPlayer();
+  final songs = <Song>[];
+  final pos = ValueNotifier<Duration>(Duration.zero);
+  int i = -1;
   bool playing = false;
-  double pos = 0;
-  Timer? _t;
-  Song get s => songs[i];
-  void toggle() {
-    playing = !playing;
-    _t?.cancel();
-    if (playing) {
-      _t = Timer.periodic(const Duration(seconds: 1), (_) {
-        pos += 1;
-        if (pos >= s.secs) {
-          next();
-        } else {
-          notifyListeners();
-        }
-      });
+  String? error;
+
+  P() {
+    player.playerStateStream.listen((st) {
+      playing = st.playing;
+      if (st.processingState == ProcessingState.completed) next();
+      notifyListeners();
+    });
+    player.positionStream.listen((d) => pos.value = d);
+    player.durationStream.listen((d) {
+      if (d != null && i >= 0 && i < songs.length) {
+        songs[i].secs = d.inSeconds;
+        notifyListeners();
+      }
+    });
+  }
+
+  Song? get s => (i >= 0 && i < songs.length) ? songs[i] : null;
+
+  Future<void> add() async {
+    final r = await FilePicker.platform
+        .pickFiles(type: FileType.audio, allowMultiple: true);
+    if (r == null) return;
+    for (final f in r.files) {
+      final path = f.path;
+      if (path == null || songs.any((x) => x.path == path)) continue;
+      var name = f.name;
+      final dot = name.lastIndexOf('.');
+      if (dot > 0) name = name.substring(0, dot);
+      var artist = 'Desconocido';
+      var title = name;
+      final k = name.indexOf(' - ');
+      if (k > 0) {
+        artist = name.substring(0, k);
+        title = name.substring(k + 3);
+      }
+      final c = HSVColor.fromAHSV(
+              1, (name.hashCode.abs() % 360).toDouble(), .6, .85)
+          .toColor();
+      songs.add(Song(title, artist, path, c));
     }
     notifyListeners();
   }
 
-  void play(int n) {
+  Future<void> play(int n) async {
+    if (n < 0 || n >= songs.length) return;
     i = n;
-    pos = 0;
-    if (!playing) {
-      toggle();
-    } else {
+    error = null;
+    notifyListeners();
+    try {
+      await player.setFilePath(songs[n].path);
+      player.play();
+    } catch (e) {
+      error = 'No se pudo reproducir';
       notifyListeners();
     }
   }
 
+  void toggle() {
+    if (s == null) return;
+    playing ? player.pause() : player.play();
+  }
+
   void next() {
-    i = (i + 1) % songs.length;
-    pos = 0;
-    notifyListeners();
+    if (songs.isNotEmpty) play((i + 1) % songs.length);
   }
 
   void prev() {
-    i = (i - 1 + songs.length) % songs.length;
-    pos = 0;
-    notifyListeners();
+    if (songs.isEmpty) return;
+    if (pos.value.inSeconds > 3) {
+      player.seek(Duration.zero);
+    } else {
+      play((i - 1 + songs.length) % songs.length);
+    }
   }
 
-  void seek(double v) {
-    pos = v;
-    notifyListeners();
-  }
+  void seek(double v) => player.seek(Duration(seconds: v.toInt()));
 }
 
 final p = P();
@@ -119,17 +146,42 @@ class Tile extends StatelessWidget {
   const Tile(this.i, {super.key});
   @override
   Widget build(BuildContext context) {
-    final s = songs[i];
+    final s = p.songs[i];
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Art(s.color, 50, 10),
       title: Text(s.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(s.artist, style: const TextStyle(color: Colors.white54)),
-      trailing: Text(fmt(s.secs),
-          style: const TextStyle(color: Colors.white38, fontSize: 12)),
+      subtitle: Text(s.artist,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white54)),
+      trailing: s.secs > 0
+          ? Text(fmt(s.secs),
+              style: const TextStyle(color: Colors.white38, fontSize: 12))
+          : null,
       onTap: () => p.play(i),
     );
   }
+}
+
+class Empty extends StatelessWidget {
+  const Empty({super.key});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 80),
+        child: Column(children: [
+          const Icon(Icons.library_music_rounded,
+              size: 72, color: Colors.white24),
+          const SizedBox(height: 12),
+          const Text('Aún no hay música',
+              style: TextStyle(color: Colors.white54)),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+              onPressed: p.add,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Añadir música')),
+        ]),
+      );
 }
 
 class Shell extends StatefulWidget {
@@ -160,21 +212,21 @@ class _ShellState extends State<Shell> {
                   data: MediaQuery.of(context)
                       .copyWith(padding: EdgeInsets.zero),
                   child: NavigationBar(
-                  height: 64,
-                  surfaceTintColor: Colors.transparent,
-                  backgroundColor: Colors.white10,
-                  selectedIndex: tab,
-                  onDestinationSelected: (v) => setState(() => tab = v),
-                  destinations: const [
-                    NavigationDestination(
-                        icon: Icon(Icons.home_rounded), label: 'Inicio'),
-                    NavigationDestination(
-                        icon: Icon(Icons.search_rounded), label: 'Buscar'),
-                    NavigationDestination(
-                        icon: Icon(Icons.library_music_rounded),
-                        label: 'Biblioteca'),
-                  ],
-                ),
+                    height: 64,
+                    surfaceTintColor: Colors.transparent,
+                    backgroundColor: Colors.white10,
+                    selectedIndex: tab,
+                    onDestinationSelected: (v) => setState(() => tab = v),
+                    destinations: const [
+                      NavigationDestination(
+                          icon: Icon(Icons.home_rounded), label: 'Inicio'),
+                      NavigationDestination(
+                          icon: Icon(Icons.search_rounded), label: 'Buscar'),
+                      NavigationDestination(
+                          icon: Icon(Icons.library_music_rounded),
+                          label: 'Biblioteca'),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -192,6 +244,7 @@ class Mini extends StatelessWidget {
         listenable: p,
         builder: (_, __) {
           final s = p.s;
+          if (s == null) return const SizedBox.shrink();
           return GestureDetector(
             onTap: () => showModalBottomSheet(
               context: context,
@@ -219,7 +272,9 @@ class Mini extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700)),
-                          Text(s.artist,
+                          Text(p.error ?? s.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 12)),
                         ])),
@@ -247,7 +302,9 @@ class Full extends StatelessWidget {
         listenable: p,
         builder: (_, __) {
           final s = p.s;
+          if (s == null) return const SizedBox.shrink();
           final w = MediaQuery.of(context).size.width - 64;
+          final max = s.secs > 0 ? s.secs.toDouble() : 1.0;
           return Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
@@ -272,27 +329,34 @@ class Full extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(s.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontSize: 26, fontWeight: FontWeight.w800)),
               ),
               Align(
                 alignment: Alignment.centerLeft,
-                child: Text('${s.artist} · ${s.album}',
+                child: Text(s.artist,
                     style: const TextStyle(color: Colors.white70)),
               ),
-              Slider(
-                value: p.pos.clamp(0.0, s.secs.toDouble()).toDouble(),
-                max: s.secs.toDouble(),
-                onChanged: p.seek,
+              ValueListenableBuilder<Duration>(
+                valueListenable: p.pos,
+                builder: (_, d, __) => Column(children: [
+                  Slider(
+                    value: d.inSeconds.toDouble().clamp(0.0, max).toDouble(),
+                    max: max,
+                    onChanged: p.seek,
+                  ),
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(fmt(d.inSeconds),
+                            style: const TextStyle(color: Colors.white54)),
+                        Text(fmt(s.secs),
+                            style: const TextStyle(color: Colors.white54)),
+                      ]),
+                ]),
               ),
-              Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(fmt(p.pos),
-                        style: const TextStyle(color: Colors.white54)),
-                    Text(fmt(s.secs),
-                        style: const TextStyle(color: Colors.white54)),
-                  ]),
               const SizedBox(height: 8),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 IconButton(
@@ -322,50 +386,68 @@ class Full extends StatelessWidget {
 class Home extends StatelessWidget {
   const Home({super.key});
   @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
-        children: [
-          const Text('Buenas noches',
-              style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 20),
-          const Text('Para ti',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 205,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: songs.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (_, i) => GestureDetector(
-                onTap: () => p.play(i),
-                child: SizedBox(
-                  width: 140,
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Art(songs[i].color, 140, 18),
-                        const SizedBox(height: 8),
-                        Text(songs[i].title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                        Text(songs[i].artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                color: Colors.white54, fontSize: 12)),
-                      ]),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: p,
+        builder: (_, __) {
+          final songs = p.songs;
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
+            children: [
+              Row(children: [
+                const Expanded(
+                    child: Text('Buenas noches',
+                        style: TextStyle(
+                            fontSize: 30, fontWeight: FontWeight.w800))),
+                IconButton(
+                    onPressed: p.add,
+                    icon: const Icon(Icons.add_circle_outline_rounded)),
+              ]),
+              if (songs.isEmpty) const Empty(),
+              if (songs.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                const Text('Para ti',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 205,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: songs.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (_, i) => GestureDetector(
+                      onTap: () => p.play(i),
+                      child: SizedBox(
+                        width: 140,
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Art(songs[i].color, 140, 18),
+                              const SizedBox(height: 8),
+                              Text(songs[i].title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600)),
+                              Text(songs[i].artist,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      color: Colors.white54, fontSize: 12)),
+                            ]),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Text('Recientes',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          for (var i = 0; i < songs.length; i++) Tile(i),
-        ],
+                const SizedBox(height: 16),
+                const Text('Tu música',
+                    style:
+                        TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+                for (var i = 0; i < songs.length; i++) Tile(i),
+              ],
+            ],
+          );
+        },
       );
 }
 
@@ -378,62 +460,79 @@ class Search extends StatefulWidget {
 class _SearchState extends State<Search> {
   String q = '';
   @override
-  Widget build(BuildContext context) {
-    final ids = [
-      for (var i = 0; i < songs.length; i++)
-        if ('${songs[i].title} ${songs[i].artist} ${songs[i].album}'
-            .toLowerCase()
-            .contains(q.toLowerCase()))
-          i
-    ];
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
-      children: [
-        TextField(
-          onChanged: (v) => setState(() => q = v),
-          decoration: InputDecoration(
-            hintText: 'Canciones, artistas, álbumes',
-            prefixIcon: const Icon(Icons.search_rounded),
-            filled: true,
-            border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(28),
-                borderSide: BorderSide.none),
-          ),
-        ),
-        const SizedBox(height: 12),
-        for (final i in ids) Tile(i),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: p,
+        builder: (_, __) {
+          final ids = [
+            for (var i = 0; i < p.songs.length; i++)
+              if ('${p.songs[i].title} ${p.songs[i].artist}'
+                  .toLowerCase()
+                  .contains(q.toLowerCase()))
+                i
+          ];
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
+            children: [
+              TextField(
+                onChanged: (v) => setState(() => q = v),
+                decoration: InputDecoration(
+                  hintText: 'Canciones o artistas',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  filled: true,
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(28),
+                      borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final i in ids) Tile(i),
+            ],
+          );
+        },
+      );
 }
 
 class Library extends StatelessWidget {
   const Library({super.key});
   @override
-  Widget build(BuildContext context) => GridView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            childAspectRatio: .85),
-        itemCount: songs.length,
-        itemBuilder: (_, i) => GestureDetector(
-          onTap: () => p.play(i),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                    child: LayoutBuilder(
-                        builder: (_, c) =>
-                            Art(songs[i].color, c.maxWidth, 18))),
-                const SizedBox(height: 6),
-                Text(songs[i].album,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-                Text(songs[i].artist,
-                    style:
-                        const TextStyle(color: Colors.white54, fontSize: 12)),
-              ]),
-        ),
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: p,
+        builder: (_, __) {
+          if (p.songs.isEmpty) {
+            return ListView(
+                padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
+                children: const [Empty()]);
+          }
+          return GridView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 56, 16, 220),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: .85),
+            itemCount: p.songs.length,
+            itemBuilder: (_, i) => GestureDetector(
+              onTap: () => p.play(i),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                        child: LayoutBuilder(
+                            builder: (_, c) =>
+                                Art(p.songs[i].color, c.maxWidth, 18))),
+                    const SizedBox(height: 6),
+                    Text(p.songs[i].title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(p.songs[i].artist,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                  ]),
+            ),
+          );
+        },
       );
 }

@@ -10,6 +10,14 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {channel: stable, cache: true}
       - run: flutter create --org com.peperey --project-name bitchord --platforms android .
+      - run: flutter pub add just_audio:^0.9.40 file_picker:^8.3.7
+      - name: compileSdk 37
+        run: |
+          f=$(ls android/app/build.gradle*)
+          grep -q "flutter.compileSdkVersion" $f
+          sed -i 's/flutter.compileSdkVersion/37/' $f
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" || true
       - run: cp app/main.dart lib/main.dart
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
