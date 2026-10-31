@@ -13,9 +13,11 @@ jobs:
       - run: flutter pub add just_audio:^0.9.40 file_picker:^8.3.7 just_audio_background permission_handler youtube_explode_dart
       - name: Info youtube
         run: |
-          grep -A3 '^  youtube_explode_dart:' pubspec.lock
-          grep -rhn "ytClients" ~/.pub-cache/hosted/pub.dev/youtube_explode_dart-*/lib | head -8
-          grep -rhn "static const\|static final" ~/.pub-cache/hosted/pub.dev/youtube_explode_dart-*/lib/src/reverse_engineering/clients/youtube_api_client.dart | head -15 || true
+          d=$(ls -d ~/.pub-cache/git/youtube_explode_dart-*/ ~/.pub-cache/hosted/pub.dev/youtube_explode_dart-*/ 2>/dev/null | head -1)
+          echo "DIR=$d"
+          f=$(grep -rl "androidSdkless" $d/lib | head -5)
+          echo "$f"
+          grep -rhn "static const\|static final\|^  [a-zA-Z]*(\|^  [a-zA-Z]*,$" $f | grep -i "android\|ios\|tv\|web\|vr\|mweb" | head -25
       - name: compileSdk 37
         run: |
           f=$(ls android/app/build.gradle*)
