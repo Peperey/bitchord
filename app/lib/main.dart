@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
+    await Permission.notification.request();
     await JustAudioBackground.init(
       androidNotificationChannelId: 'com.peperey.bitchord.channel',
       androidNotificationChannelName: 'Bitchord',
