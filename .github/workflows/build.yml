@@ -27,6 +27,7 @@ jobs:
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" || true
       - run: mkdir -p ~/.gradle/init.d && cp ci/sdk.gradle ~/.gradle/init.d/sdk.gradle
       - run: python3 ci/setup.py
+      - run: python3 ci/np.py
       - run: grep -q POST_NOTIFICATIONS android/app/src/main/AndroidManifest.xml
       - run: cp app/main.dart lib/main.dart
       - run: flutter build apk --release

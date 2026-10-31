@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
@@ -102,69 +103,14 @@ class P extends ChangeNotifier {
           id: songs[n].path, title: songs[n].title, artist: songs[n].artist);
       if (songs[n].path.startsWith('yt:')) {
         final id = songs[n].path.substring(3);
-        final clients = <String, yt.YoutubeApiClient>{
-          'androidVr': yt.YoutubeApiClient.androidVr,
-          'androidSdkless': yt.YoutubeApiClient.androidSdkless,
-          'ios': yt.YoutubeApiClient.ios,
-        };
-        File? file;
-        var fails = '';
-        for (final cl in clients.entries) {
-          try {
-            error = '1/3 Buscando (${cl.key})…';
-            notifyListeners();
-            final m = await yte.videos.streamsClient
-                .getManifest(id, ytClients: [cl.value])
-                .timeout(const Duration(seconds: 15));
-            final info = m.audioOnly.withHighestBitrate();
-            final f = File(
-                '${Directory.systemTemp.path}/yt_$id.${info.container.name}');
-            if (!await f.exists() || await f.length() == 0) {
-              final tmp = File('${f.path}.part');
-              final sink = tmp.openWrite();
-              final total = info.size.totalBytes;
-              final hc = http.Client();
-              try {
-                var got = 0;
-                while (got < total) {
-                  final end = got + 1048575 < total - 1
-                      ? got + 1048575
-                      : total - 1;
-                  final r = http.Request('GET', info.url);
-                  r.headers['range'] = 'bytes=$got-$end';
-                  r.headers['user-agent'] = ua;
-                  final resp =
-                      await hc.send(r).timeout(const Duration(seconds: 20));
-                  if (resp.statusCode != 200 && resp.statusCode != 206) {
-                    throw 'HTTP ${resp.statusCode}';
-                  }
-                  var n = 0;
-                  await for (final c
-                      in resp.stream.timeout(const Duration(seconds: 20))) {
-                    sink.add(c);
-                    n += c.length;
-                  }
-                  if (n == 0) throw 'sin datos';
-                  got += n;
-                  error = 'Descargando ${got * 100 ~/ total}% (${cl.key})';
-                  notifyListeners();
-                }
-              } finally {
-                hc.close();
-                await sink.close();
-              }
-              await tmp.rename(f.path);
-            }
-            file = f;
-            break;
-          } catch (ex) {
-            fails += '${cl.key}: ${ex.toString().split("\n").first}\n';
-          }
-        }
-        if (file == null) throw fails;
+        error = 'Descargando (NewPipe)…';
+        notifyListeners();
+        final path = await const MethodChannel('bitchord/yt')
+            .invokeMethod<String>('audio', id)
+            .timeout(const Duration(seconds: 180));
         error = null;
         notifyListeners();
-        await player.setAudioSource(AudioSource.file(file.path, tag: tag));
+        await player.setAudioSource(AudioSource.file(path!, tag: tag));
       } else {
         await player.setAudioSource(
             AudioSource.uri(Uri.file(songs[n].path), tag: tag));
