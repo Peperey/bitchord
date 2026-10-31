@@ -100,50 +100,57 @@ class P extends ChangeNotifier {
       final tag = MediaItem(
           id: songs[n].path, title: songs[n].title, artist: songs[n].artist);
       if (songs[n].path.startsWith('yt:')) {
-        error = '1/3 Buscando audio…';
-        notifyListeners();
-        final m = await yte.videos.streamsClient
-            .getManifest(songs[n].path.substring(3))
-            .timeout(const Duration(seconds: 15));
-        final mp4 = m.audioOnly
-            .where((x) => x.container.name == 'mp4')
-            .toList()
-          ..sort((x, y) =>
-              y.bitrate.bitsPerSecond.compareTo(x.bitrate.bitsPerSecond));
-        final info =
-            mp4.isNotEmpty ? mp4.first : m.audioOnly.withHighestBitrate();
         final id = songs[n].path.substring(3);
-        final file = File(
-            '${Directory.systemTemp.path}/yt_$id.${info.container.name}');
-        if (!await file.exists() || await file.length() == 0) {
-          error = '2/3 Conectando…';
-          notifyListeners();
-          final tmp = File('${file.path}.part');
-          final sink = tmp.openWrite();
-          var got = 0;
-          var last = -1;
-          final total = info.size.totalBytes;
+        final clients = <String, yt.YoutubeApiClient>{
+          'androidVr': yt.YoutubeApiClient.androidVr,
+          'androidSdkless': yt.YoutubeApiClient.androidSdkless,
+          'ios': yt.YoutubeApiClient.ios,
+        };
+        File? file;
+        var fails = '';
+        for (final cl in clients.entries) {
           try {
-            await for (final c in yte.videos.streamsClient
-                .get(info)
-                .timeout(const Duration(seconds: 15))) {
-              sink.add(c);
-              got += c.length;
-              final pct = total > 0 ? got * 100 ~/ total : 0;
-              if (pct != last) {
-                last = pct;
-                error = 'Descargando $pct% de '
-                    '${(total / 1048576).toStringAsFixed(1)} MB';
-                notifyListeners();
+            error = '1/3 Buscando (${cl.key})…';
+            notifyListeners();
+            final m = await yte.videos.streamsClient
+                .getManifest(id, ytClients: [cl.value])
+                .timeout(const Duration(seconds: 15));
+            final info = m.audioOnly.withHighestBitrate();
+            final f = File(
+                '${Directory.systemTemp.path}/yt_$id.${info.container.name}');
+            if (!await f.exists() || await f.length() == 0) {
+              final tmp = File('${f.path}.part');
+              final sink = tmp.openWrite();
+              var got = 0;
+              var last = -1;
+              final total = info.size.totalBytes;
+              try {
+                await for (final c in yte.videos.streamsClient
+                    .get(info)
+                    .timeout(const Duration(seconds: 15))) {
+                  sink.add(c);
+                  got += c.length;
+                  final pct = total > 0 ? got * 100 ~/ total : 0;
+                  if (pct != last) {
+                    last = pct;
+                    error = 'Descargando $pct% (${cl.key})';
+                    notifyListeners();
+                  }
+                }
+              } finally {
+                await sink.close();
               }
+              await tmp.rename(f.path);
             }
-          } finally {
-            await sink.close();
+            file = f;
+            break;
+          } catch (ex) {
+            fails += '${cl.key}: ${ex.toString().split("\n").first}\n';
           }
-          await tmp.rename(file.path);
-          error = null;
-          notifyListeners();
         }
+        if (file == null) throw fails;
+        error = null;
+        notifyListeners();
         await player.setAudioSource(AudioSource.file(file.path, tag: tag));
       } else {
         await player.setAudioSource(
