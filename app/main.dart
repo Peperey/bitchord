@@ -100,8 +100,11 @@ class P extends ChangeNotifier {
       final tag = MediaItem(
           id: songs[n].path, title: songs[n].title, artist: songs[n].artist);
       if (songs[n].path.startsWith('yt:')) {
+        error = '1/3 Buscando audio…';
+        notifyListeners();
         final m = await yte.videos.streamsClient
-            .getManifest(songs[n].path.substring(3));
+            .getManifest(songs[n].path.substring(3))
+            .timeout(const Duration(seconds: 15));
         final mp4 = m.audioOnly
             .where((x) => x.container.name == 'mp4')
             .toList()
@@ -113,7 +116,7 @@ class P extends ChangeNotifier {
         final file = File(
             '${Directory.systemTemp.path}/yt_$id.${info.container.name}');
         if (!await file.exists() || await file.length() == 0) {
-          error = 'Descargando…';
+          error = '2/3 Conectando…';
           notifyListeners();
           final tmp = File('${file.path}.part');
           final sink = tmp.openWrite();
@@ -123,7 +126,7 @@ class P extends ChangeNotifier {
           try {
             await for (final c in yte.videos.streamsClient
                 .get(info)
-                .timeout(const Duration(seconds: 30))) {
+                .timeout(const Duration(seconds: 15))) {
               sink.add(c);
               got += c.length;
               final pct = total > 0 ? got * 100 ~/ total : 0;
