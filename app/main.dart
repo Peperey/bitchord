@@ -113,7 +113,7 @@ class P extends ChangeNotifier {
       ));
       player.play();
     } catch (e) {
-      error = 'No se pudo reproducir';
+      error = '$e';
       notifyListeners();
     }
   }
@@ -322,7 +322,7 @@ class Mini extends StatelessWidget {
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700)),
                           Text(p.error ?? s.artist,
-                              maxLines: 1,
+                              maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 12)),
