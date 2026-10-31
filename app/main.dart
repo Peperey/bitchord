@@ -118,6 +118,7 @@ Future<void> main() async {
     androidNotificationIcon: 'drawable/ic_notif',
   );
   await Permission.notification.request();
+  await Permission.ignoreBatteryOptimizations.request();
   runApp(const App());
 }
 
