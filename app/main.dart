@@ -397,6 +397,13 @@ class Mini extends StatelessWidget {
           final s = p.s;
           if (s == null) return const SizedBox.shrink();
           return GestureDetector(
+            onLongPress: () => showDialog(
+              context: context,
+              builder: (_) => AlertDialog(
+                content: SingleChildScrollView(
+                    child: SelectableText(p.error ?? 'sin error')),
+              ),
+            ),
             onTap: () => showModalBottomSheet(
               context: context,
               isScrollControlled: true,
