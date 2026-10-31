@@ -1,0 +1,7 @@
+allprojects {
+    afterEvaluate { p ->
+        if (p.hasProperty('android')) {
+            p.android.compileSdkVersion 37
+        }
+    }
+}
