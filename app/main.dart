@@ -117,8 +117,23 @@ class P extends ChangeNotifier {
           notifyListeners();
           final tmp = File('${file.path}.part');
           final sink = tmp.openWrite();
+          var got = 0;
+          var last = -1;
+          final total = info.size.totalBytes;
           try {
-            await sink.addStream(yte.videos.streamsClient.get(info));
+            await for (final c in yte.videos.streamsClient
+                .get(info)
+                .timeout(const Duration(seconds: 30))) {
+              sink.add(c);
+              got += c.length;
+              final pct = total > 0 ? got * 100 ~/ total : 0;
+              if (pct != last) {
+                last = pct;
+                error = 'Descargando $pct% de '
+                    '${(total / 1048576).toStringAsFixed(1)} MB';
+                notifyListeners();
+              }
+            }
           } finally {
             await sink.close();
           }
