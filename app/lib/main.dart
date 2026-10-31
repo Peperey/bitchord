@@ -81,7 +81,7 @@ class _PlayerPageState extends State<PlayerPage> {
                   builder: (_, s2) {
                     final pos = s2.data ?? Duration.zero;
                     final maxMs = dur.inMilliseconds.toDouble();
-                    final val = pos.inMilliseconds.toDouble().clamp(0, maxMs);
+                    final val = pos.inMilliseconds.toDouble().clamp(0.0, maxMs).toDouble();
                     return Column(children: [
                       Slider(
                         value: val,
