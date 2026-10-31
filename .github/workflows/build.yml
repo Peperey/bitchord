@@ -10,7 +10,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {channel: stable, cache: true}
       - run: flutter create --org com.peperey --project-name bitchord --platforms android .
-      - run: flutter pub add just_audio:^0.9.40 file_picker:^8.3.7
+      - run: flutter pub add just_audio:^0.9.40 file_picker:^8.3.7 just_audio_background permission_handler
       - name: compileSdk 37
         run: |
           f=$(ls android/app/build.gradle*)
@@ -19,6 +19,8 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
           $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" || true
       - run: mkdir -p ~/.gradle/init.d && cp ci/sdk.gradle ~/.gradle/init.d/sdk.gradle
+      - run: python3 ci/setup.py
+      - run: grep -q POST_NOTIFICATIONS android/app/src/main/AndroidManifest.xml
       - run: cp app/main.dart lib/main.dart
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4

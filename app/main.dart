@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class Song {
   final String title, artist, path;
@@ -71,7 +73,13 @@ class P extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      await player.setFilePath(songs[n].path);
+      await player.setAudioSource(AudioSource.uri(
+        Uri.file(songs[n].path),
+        tag: MediaItem(
+            id: songs[n].path,
+            title: songs[n].title,
+            artist: songs[n].artist),
+      ));
       player.play();
     } catch (e) {
       error = 'No se pudo reproducir';
@@ -102,7 +110,16 @@ class P extends ChangeNotifier {
 
 final p = P();
 
-void main() => runApp(const App());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await JustAudioBackground.init(
+    androidNotificationChannelId: 'com.peperey.bitchord.audio',
+    androidNotificationChannelName: 'Reproducción',
+    androidNotificationIcon: 'drawable/ic_notif',
+  );
+  await Permission.notification.request();
+  runApp(const App());
+}
 
 class App extends StatelessWidget {
   const App({super.key});
