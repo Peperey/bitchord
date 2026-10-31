@@ -3,12 +3,26 @@ import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
 Future<void> main() async {
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.peperey.bitchord.channel',
-    androidNotificationChannelName: 'Bitchord',
-    androidNotificationOngoing: true,
-  );
-  runApp(const App());
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.peperey.bitchord.channel',
+      androidNotificationChannelName: 'Bitchord',
+      androidNotificationOngoing: true,
+    );
+    runApp(const App());
+  } catch (e) {
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text('Error de audio: $e', style: const TextStyle(color: Colors.red)),
+          ),
+        ),
+      ),
+    ));
+  }
 }
 
 class App extends StatelessWidget {
