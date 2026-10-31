@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:http/http.dart' as http;
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -121,23 +122,35 @@ class P extends ChangeNotifier {
             if (!await f.exists() || await f.length() == 0) {
               final tmp = File('${f.path}.part');
               final sink = tmp.openWrite();
-              var got = 0;
-              var last = -1;
               final total = info.size.totalBytes;
+              final hc = http.Client();
               try {
-                await for (final c in yte.videos.streamsClient
-                    .get(info)
-                    .timeout(const Duration(seconds: 15))) {
-                  sink.add(c);
-                  got += c.length;
-                  final pct = total > 0 ? got * 100 ~/ total : 0;
-                  if (pct != last) {
-                    last = pct;
-                    error = 'Descargando $pct% (${cl.key})';
-                    notifyListeners();
+                var got = 0;
+                while (got < total) {
+                  final end = got + 1048575 < total - 1
+                      ? got + 1048575
+                      : total - 1;
+                  final r = http.Request('GET', info.url);
+                  r.headers['range'] = 'bytes=$got-$end';
+                  r.headers['user-agent'] = ua;
+                  final resp =
+                      await hc.send(r).timeout(const Duration(seconds: 20));
+                  if (resp.statusCode != 200 && resp.statusCode != 206) {
+                    throw 'HTTP ${resp.statusCode}';
                   }
+                  var n = 0;
+                  await for (final c
+                      in resp.stream.timeout(const Duration(seconds: 20))) {
+                    sink.add(c);
+                    n += c.length;
+                  }
+                  if (n == 0) throw 'sin datos';
+                  got += n;
+                  error = 'Descargando ${got * 100 ~/ total}% (${cl.key})';
+                  notifyListeners();
                 }
               } finally {
+                hc.close();
                 await sink.close();
               }
               await tmp.rename(f.path);
@@ -224,6 +237,9 @@ class YtSource extends StreamAudioSource {
     );
   }
 }
+
+const ua =
+    'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip';
 
 final p = P();
 
