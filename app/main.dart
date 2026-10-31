@@ -1,4 +1,7 @@
 import 'dart:io';
+import 'dart:convert';
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:ui';
@@ -43,6 +46,7 @@ class P extends ChangeNotifier {
   Future<void> addPlay(Song s) async {
     songs.add(s);
     notifyListeners();
+    save();
     await play(songs.length - 1);
   }
   final songs = <Song>[];
@@ -63,8 +67,46 @@ class P extends ChangeNotifier {
       if (d != null && i >= 0 && i < songs.length) {
         songs[i].secs = d.inSeconds;
         notifyListeners();
+        save();
       }
     });
+  }
+
+  Future<void> save() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setString(
+          'songs',
+          jsonEncode([
+            for (final x in songs)
+              {
+                't': x.title,
+                'a': x.artist,
+                'p': x.path,
+                's': x.secs,
+                'h': HSVColor.fromColor(x.color).hue,
+              }
+          ]));
+    } catch (_) {}
+  }
+
+  Future<void> load() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final raw = sp.getString('songs');
+      if (raw == null) return;
+      for (final m in jsonDecode(raw) as List) {
+        final path = m['p'] as String;
+        if (!path.startsWith('yt:') && !File(path).existsSync()) continue;
+        songs.add(Song(
+            m['t'] as String,
+            m['a'] as String,
+            path,
+            HSVColor.fromAHSV(1, (m['h'] as num).toDouble(), .6, .85)
+                .toColor(),
+            m['s'] as int));
+      }
+    } catch (_) {}
   }
 
   Song? get s => (i >= 0 && i < songs.length) ? songs[i] : null;
@@ -89,9 +131,22 @@ class P extends ChangeNotifier {
       final c = HSVColor.fromAHSV(
               1, (name.hashCode.abs() % 360).toDouble(), .6, .85)
           .toColor();
-      songs.add(Song(title, artist, path, c));
+      var dest = path;
+      try {
+        final dir = Directory(
+            '${(await getApplicationDocumentsDirectory()).path}/music');
+        await dir.create(recursive: true);
+        dest = '${dir.path}/${f.name}';
+        if (!File(dest).existsSync()) await File(path).copy(dest);
+        if (songs.any((x) => x.path == dest)) continue;
+        if (dest != path) await File(path).delete();
+      } catch (_) {
+        dest = path;
+      }
+      songs.add(Song(title, artist, dest, c));
     }
     notifyListeners();
+    save();
   }
 
   Future<void> play(int n) async {
@@ -203,6 +258,7 @@ Future<void> main() async {
   );
   await Permission.notification.request();
   await Permission.ignoreBatteryOptimizations.request();
+  await p.load();
   runApp(const App());
 }
 
