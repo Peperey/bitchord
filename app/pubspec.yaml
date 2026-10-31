@@ -1,13 +1,14 @@
 name: bitchord
 description: Reproductor de musica
 publish_to: 'none'
-version: 1.0.0+2
+version: 1.0.0+4
 environment:
   sdk: '>=3.0.0 <4.0.0'
 dependencies:
   flutter:
     sdk: flutter
-  just_audio: ^0.9.36
-  just_audio_background: ^0.0.1-beta.15
+  just_audio: ^0.11.0
+  just_audio_background: ^0.0.1-beta.17
+  permission_handler: ^11.3.1
 flutter:
   uses-material-design: true
