@@ -48,6 +48,7 @@ class P extends ChangeNotifier {
   final songs = <Song>[];
   final pos = ValueNotifier<Duration>(Duration.zero);
   int i = -1;
+  int _gen = 0;
   bool playing = false;
   String? error;
 
@@ -96,6 +97,8 @@ class P extends ChangeNotifier {
   Future<void> play(int n) async {
     if (n < 0 || n >= songs.length) return;
     i = n;
+    final my = ++_gen;
+    player.pause();
     error = null;
     notifyListeners();
     try {
@@ -108,6 +111,7 @@ class P extends ChangeNotifier {
         final path = await const MethodChannel('bitchord/yt')
             .invokeMethod<String>('audio', id)
             .timeout(const Duration(seconds: 180));
+        if (my != _gen) return;
         error = null;
         notifyListeners();
         await player.setAudioSource(AudioSource.file(path!, tag: tag));
@@ -117,6 +121,7 @@ class P extends ChangeNotifier {
       }
       player.play();
     } catch (e) {
+      if (my != _gen) return;
       error = '$e';
       notifyListeners();
     }
