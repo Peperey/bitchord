@@ -18,6 +18,7 @@ jobs:
           cp app/pubspec.yaml pubspec.yaml
           cp app/lib/main.dart lib/main.dart
           cp app/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp app/kotlin/MainActivity.kt android/app/src/main/kotlin/com/peperey/bitchord/MainActivity.kt
       - run: flutter pub get
       - run: flutter build apk --release
       - uses: actions/upload-artifact@v4
