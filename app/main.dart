@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -101,8 +102,31 @@ class P extends ChangeNotifier {
       if (songs[n].path.startsWith('yt:')) {
         final m = await yte.videos.streamsClient
             .getManifest(songs[n].path.substring(3));
-        final info = m.audioOnly.withHighestBitrate();
-        await player.setAudioSource(YtSource(yte, info, tag));
+        final mp4 = m.audioOnly
+            .where((x) => x.container.name == 'mp4')
+            .toList()
+          ..sort((x, y) =>
+              y.bitrate.bitsPerSecond.compareTo(x.bitrate.bitsPerSecond));
+        final info =
+            mp4.isNotEmpty ? mp4.first : m.audioOnly.withHighestBitrate();
+        final id = songs[n].path.substring(3);
+        final file = File(
+            '${Directory.systemTemp.path}/yt_$id.${info.container.name}');
+        if (!await file.exists() || await file.length() == 0) {
+          error = 'Descargando…';
+          notifyListeners();
+          final tmp = File('${file.path}.part');
+          final sink = tmp.openWrite();
+          try {
+            await sink.addStream(yte.videos.streamsClient.get(info));
+          } finally {
+            await sink.close();
+          }
+          await tmp.rename(file.path);
+          error = null;
+          notifyListeners();
+        }
+        await player.setAudioSource(AudioSource.file(file.path, tag: tag));
       } else {
         await player.setAudioSource(
             AudioSource.uri(Uri.file(songs[n].path), tag: tag));
